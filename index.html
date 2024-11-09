@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>MiniSocial - Web3 Demo</title>
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/css/bootstrap.min.css"
+            rel="stylesheet"
+        />
+        <link
+            href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css"
+            rel="stylesheet"
+        />
+        <script src="https://cdn.jsdelivr.net/npm/web3@1.7.0/dist/web3.min.js"></script>
+    </head>
+    <body class="bg-light">
+        <nav class="navbar navbar-dark bg-primary mb-4">
+            <div class="container">
+                <span class="navbar-brand mb-0 h1">MiniSocial - Web3 Demo</span>
+                <button class="btn btn-outline-light" onclick="changeUser();">
+                    <i class="fas fa-user-switch"></i> Change User
+                </button>
+            </div>
+        </nav>
+
+        <div class="container">
+            <div class="row">
+                <div class="col-md-8 offset-md-2">
+                    <!-- Post Creation Card -->
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title">Create Post</h5>
+                            <div class="mb-3">
+                                <textarea
+                                    id="tweetMessage"
+                                    class="form-control"
+                                    rows="3"
+                                    placeholder="What's on your mind?"
+                                ></textarea>
+                            </div>
+                            <button
+                                class="btn btn-primary"
+                                onclick="publishPost();"
+                            >
+                                <i class="fas fa-paper-plane"></i> Post
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- News Feed Section -->
+                    <div class="card shadow-sm">
+                        <div class="card-body">
+                            <div
+                                class="d-flex justify-content-between align-items-center mb-3"
+                            >
+                                <h5 class="card-title mb-0">News Feed</h5>
+                                <button
+                                    class="btn btn-outline-primary"
+                                    onclick="loadTweets();"
+                                >
+                                    <i class="fas fa-sync"></i> Refresh
+                                </button>
+                            </div>
+                            <div id="tweetsList"></div>
+                        </div>
+                    </div>
+
+                    <!-- Status Alert -->
+                    <div class="alert alert-info mt-3" role="alert">
+                        Status: <span id="status">Loading...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Post Modal -->
+        <div class="modal fade" id="editModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Edit Post</h5>
+                        <button
+                            type="button"
+                            class="btn-close"
+                            data-bs-dismiss="modal"
+                        ></button>
+                    </div>
+                    <div class="modal-body">
+                        <textarea
+                            id="editMessage"
+                            class="form-control"
+                            rows="3"
+                        ></textarea>
+                    </div>
+                    <div class="modal-footer">
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            data-bs-dismiss="modal"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            onclick="saveEdit()"
+                        >
+                            Save changes
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.3.2/js/bootstrap.bundle.min.js"></script>
+        <script type="text/javascript">
+            let contract;
+            let web3;
+            let currentEditingPostId;
+            const contractAddress =
+                "0xa513E6E4b8f2a923D98304ec87F64353C4D5C853";
+            const contractABI = [
+                {
+                    anonymous: false,
+                    inputs: [
+                        {
+                            indexed: true,
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                        {
+                            indexed: true,
+                            internalType: "address",
+                            name: "author",
+                            type: "address",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "string",
+                            name: "message",
+                            type: "string",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "uint256",
+                            name: "timestamp",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "PostAdded",
+                    type: "event",
+                },
+                {
+                    anonymous: false,
+                    inputs: [
+                        {
+                            indexed: true,
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                        {
+                            indexed: true,
+                            internalType: "address",
+                            name: "author",
+                            type: "address",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "uint256",
+                            name: "timestamp",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "PostDeleted",
+                    type: "event",
+                },
+                {
+                    anonymous: false,
+                    inputs: [
+                        {
+                            indexed: true,
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                        {
+                            indexed: true,
+                            internalType: "address",
+                            name: "user",
+                            type: "address",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "uint256",
+                            name: "newDislikeCount",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "PostDisliked",
+                    type: "event",
+                },
+                {
+                    anonymous: false,
+                    inputs: [
+                        {
+                            indexed: true,
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                        {
+                            indexed: true,
+                            internalType: "address",
+                            name: "user",
+                            type: "address",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "uint256",
+                            name: "newLikeCount",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "PostLiked",
+                    type: "event",
+                },
+                {
+                    anonymous: false,
+                    inputs: [
+                        {
+                            indexed: true,
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "string",
+                            name: "newMessage",
+                            type: "string",
+                        },
+                        {
+                            indexed: false,
+                            internalType: "uint256",
+                            name: "timestamp",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "PostModified",
+                    type: "event",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "deletePost",
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "dislikePost",
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "likePost",
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "postId",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "string",
+                            name: "_newMessage",
+                            type: "string",
+                        },
+                    ],
+                    name: "modifyPost",
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "string",
+                            name: "_message",
+                            type: "string",
+                        },
+                    ],
+                    name: "publishPost",
+                    outputs: [],
+                    stateMutability: "nonpayable",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "index",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "getPost",
+                    outputs: [
+                        {
+                            internalType: "string",
+                            name: "message",
+                            type: "string",
+                        },
+                        {
+                            internalType: "address",
+                            name: "author",
+                            type: "address",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "likes",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "dislikes",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "createdAt",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "updatedAt",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "bool",
+                            name: "hasLiked",
+                            type: "bool",
+                        },
+                        {
+                            internalType: "bool",
+                            name: "hasDisliked",
+                            type: "bool",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [],
+                    name: "getTotalPosts",
+                    outputs: [
+                        {
+                            internalType: "uint256",
+                            name: "",
+                            type: "uint256",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "address",
+                            name: "user",
+                            type: "address",
+                        },
+                    ],
+                    name: "getUserPosts",
+                    outputs: [
+                        {
+                            internalType: "uint256[]",
+                            name: "",
+                            type: "uint256[]",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "address",
+                            name: "user",
+                            type: "address",
+                        },
+                    ],
+                    name: "getUserPostsWithDetails",
+                    outputs: [
+                        {
+                            internalType: "uint256[]",
+                            name: "postIds",
+                            type: "uint256[]",
+                        },
+                        {
+                            internalType: "string[]",
+                            name: "messages",
+                            type: "string[]",
+                        },
+                        {
+                            internalType: "uint256[]",
+                            name: "likes",
+                            type: "uint256[]",
+                        },
+                        {
+                            internalType: "uint256[]",
+                            name: "dislikes",
+                            type: "uint256[]",
+                        },
+                        {
+                            internalType: "uint256[]",
+                            name: "timestamps",
+                            type: "uint256[]",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [],
+                    name: "MAX_POST_LENGTH",
+                    outputs: [
+                        {
+                            internalType: "uint256",
+                            name: "",
+                            type: "uint256",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "posts",
+                    outputs: [
+                        {
+                            internalType: "string",
+                            name: "message",
+                            type: "string",
+                        },
+                        {
+                            internalType: "address",
+                            name: "author",
+                            type: "address",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "createdAt",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "updatedAt",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "likes",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "dislikes",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "bool",
+                            name: "isDeleted",
+                            type: "bool",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "uint256",
+                            name: "",
+                            type: "uint256",
+                        },
+                        {
+                            internalType: "address",
+                            name: "",
+                            type: "address",
+                        },
+                    ],
+                    name: "userInteractions",
+                    outputs: [
+                        {
+                            internalType: "bool",
+                            name: "hasLiked",
+                            type: "bool",
+                        },
+                        {
+                            internalType: "bool",
+                            name: "hasDisliked",
+                            type: "bool",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+                {
+                    inputs: [
+                        {
+                            internalType: "address",
+                            name: "",
+                            type: "address",
+                        },
+                        {
+                            internalType: "uint256",
+                            name: "",
+                            type: "uint256",
+                        },
+                    ],
+                    name: "userPosts",
+                    outputs: [
+                        {
+                            internalType: "uint256",
+                            name: "",
+                            type: "uint256",
+                        },
+                    ],
+                    stateMutability: "view",
+                    type: "function",
+                },
+            ];
+
+            async function loadWeb3() {
+                if (window.ethereum) {
+                    web3 = new Web3(window.ethereum);
+                    await window.ethereum.enable();
+                }
+            }
+
+            async function loadContract() {
+                return new web3.eth.Contract(contractABI, contractAddress);
+            }
+
+            async function getCurrentAccount() {
+                const accounts = await web3.eth.getAccounts();
+                return accounts[0];
+            }
+
+            async function changeUser() {
+                try {
+                    const accounts = await web3.eth.getAccounts();
+                    const currentAccount = accounts[0];
+                    showToast(
+                        `Connected as: ${currentAccount.substring(
+                            0,
+                            6
+                        )}...${currentAccount.substring(38)}`
+                    );
+                    loadTweets();
+                } catch (error) {
+                    showError("Error changing user: " + error.message);
+                }
+            }
+
+            async function publishPost() {
+                const message = document.getElementById("tweetMessage").value;
+                if (!message) {
+                    showError("Please enter a message!");
+                    return;
+                }
+
+                try {
+                    updateStatus("Publishing post...");
+                    const account = await getCurrentAccount();
+                    await contract.methods
+                        .publishPost(message)
+                        .send({ from: account });
+
+                    document.getElementById("tweetMessage").value = "";
+                    showToast("Post published successfully!");
+                    loadTweets();
+                } catch (error) {
+                    showError("Error publishing post: " + error.message);
+                }
+            }
+
+            async function likePost(postId) {
+                try {
+                    const account = await getCurrentAccount();
+                    await contract.methods
+                        .likePost(postId)
+                        .send({ from: account });
+                    showToast("Post liked!");
+                    loadTweets();
+                } catch (error) {
+                    showError("Error liking post: " + error.message);
+                }
+            }
+
+            async function dislikePost(postId) {
+                try {
+                    const account = await getCurrentAccount();
+                    await contract.methods
+                        .dislikePost(postId)
+                        .send({ from: account });
+                    showToast("Post disliked!");
+                    loadTweets();
+                } catch (error) {
+                    showError("Error disliking post: " + error.message);
+                }
+            }
+
+            async function showEditModal(postId, currentMessage) {
+                currentEditingPostId = postId;
+                document.getElementById("editMessage").value = currentMessage;
+                const editModal = new bootstrap.Modal(
+                    document.getElementById("editModal")
+                );
+                editModal.show();
+            }
+
+            async function saveEdit() {
+                const newMessage = document.getElementById("editMessage").value;
+                if (!newMessage) {
+                    showError("Please enter a message!");
+                    return;
+                }
+
+                try {
+                    const account = await getCurrentAccount();
+                    await contract.methods
+                        .modifyPost(currentEditingPostId, newMessage)
+                        .send({ from: account });
+
+                    const editModal = bootstrap.Modal.getInstance(
+                        document.getElementById("editModal")
+                    );
+                    editModal.hide();
+                    showToast("Post updated successfully!");
+                    loadTweets();
+                } catch (error) {
+                    showError("Error updating post: " + error.message);
+                }
+            }
+
+            async function loadTweets() {
+                try {
+                    updateStatus("Loading posts...");
+                    const totalPosts = await contract.methods
+                        .getTotalPosts()
+                        .call();
+                    const currentAccount = await getCurrentAccount();
+                    const tweetsList = document.getElementById("tweetsList");
+                    tweetsList.innerHTML = "";
+
+                    for (let i = 0; i < totalPosts; i++) {
+                        const post = await contract.methods.getPost(i).call();
+                        const isAuthor =
+                            post[1].toLowerCase() ===
+                            currentAccount.toLowerCase();
+
+                        const postElement = document.createElement("div");
+                        postElement.className = "card mb-3";
+                        postElement.innerHTML = `
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between">
+                                <h6 class="card-subtitle mb-2 text-muted">
+                                    ${post[1].substring(
+                                        0,
+                                        6
+                                    )}...${post[1].substring(38)}
+                                </h6>
+                                <small class="text-muted">
+                                    ${new Date(post[4] * 1000).toLocaleString()}
+                                </small>
+                            </div>
+                            <p class="card-text">${post[0]}</p>
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="btn-group">
+                                    <button onclick="likePost(${i})" class="btn btn-outline-primary btn-sm">
+                                        <i class="fas fa-thumbs-up"></i> ${
+                                            post[2]
+                                        }
+                                    </button>
+                                    <button onclick="dislikePost(${i})" class="btn btn-outline-danger btn-sm">
+                                        <i class="fas fa-thumbs-down"></i> ${
+                                            post[3]
+                                        }
+                                    </button>
+                                </div>
+                                ${
+                                    isAuthor
+                                        ? `
+                                    <button onclick="showEditModal(${i}, '${post[0]}')" class="btn btn-outline-secondary btn-sm">
+                                        <i class="fas fa-edit"></i> Edit
+                                    </button>
+                                `
+                                        : ""
+                                }
+                            </div>
+                        </div>
+                    `;
+                        tweetsList.appendChild(postElement);
+                    }
+
+                    updateStatus("Posts loaded successfully!");
+                } catch (error) {
+                    showError("Error loading posts: " + error.message);
+                }
+            }
+
+            function showToast(message) {
+                const toastContainer = document.createElement("div");
+                toastContainer.style.position = "fixed";
+                toastContainer.style.top = "20px";
+                toastContainer.style.right = "20px";
+                toastContainer.style.zIndex = "1050";
+
+                toastContainer.innerHTML = `
+                <div class="toast show" role="alert">
+                    <div class="toast-header">
+                        <strong class="me-auto">MiniSocial</strong>
+                        <button type="button" class="btn-close" data-bs-dismiss="toast"></button>
+                    </div>
+                    <div class="toast-body">${message}</div>
+                </div>
+            `;
+
+                document.body.appendChild(toastContainer);
+                setTimeout(() => toastContainer.remove(), 3000);
+            }
+
+            function showError(message) {
+                const statusEl = document.getElementById("status");
+                statusEl.innerHTML = `<span class="text-danger">${message}</span>`;
+                console.error(message);
+            }
+
+            function updateStatus(status) {
+                const statusEl = document.getElementById("status");
+                statusEl.innerHTML = status;
+                console.log(status);
+            }
+
+            async function load() {
+                try {
+                    await loadWeb3();
+                    contract = await loadContract();
+                    updateStatus("Ready!");
+                    await loadTweets();
+                } catch (error) {
+                    showError("Error initializing app: " + error.message);
+                }
+            }
+
+            load();
+        </script>
+    </body>
+</html>
