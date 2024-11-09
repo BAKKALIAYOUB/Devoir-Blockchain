@@ -210,3 +210,7 @@ Potential enhancements for future versions:
 8. Advanced search capabilities
 
 This contract serves as a foundation for a decentralized social media platform, prioritizing security, efficiency, and user experience while maintaining full transparency on the blockchain.
+
+## Interface
+
+![alt text](./images/image.png)
